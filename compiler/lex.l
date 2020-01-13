@@ -22,6 +22,7 @@
                     return PIDENTIFIER;
                 }
 [0-9]+          { LOAD_INT; return NUM; }
+"-"             { TOKEN(NEG); }
 "MINUS"         { TOKEN(MINUS); }
 "PLUS"          { TOKEN(PLUS); }
 "TIMES"         { TOKEN(TIMES); }
@@ -56,6 +57,7 @@
 "("             { TOKEN(BRACKET_ON); }
 ")"             { TOKEN(BRACKET_OFF); }
 ":"             { TOKEN(COLON); }
+","             { TOKEN(COMMA); }
 "\n"            { line++; }
 [ \t]           ;
 .               ;

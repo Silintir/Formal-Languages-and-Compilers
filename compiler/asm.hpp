@@ -26,9 +26,79 @@ struct Instruction {
         static const int64_t Undef = -1;
 
         ASM command;
-        int64_t arg, label;
+        int64_t arg = Undef, label;
 
-    static void GET(std::vector<Instruction*>& out, int64_t* label) {
+        static Instruction *GET(int64_t *label) {
+            return new Instruction(ASM::GET, (*label)++);
+        }
+
+        static Instruction *PUT(int64_t *label) {
+            return new Instruction(ASM::PUT, (*label)++);
+        }
+
+        static Instruction *LOAD(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::LOAD, (*label)++);
+        }
+
+        static Instruction *STORE(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::STORE, (*label)++);
+        }
+
+        static Instruction *LOADI(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::LOADI, (*label)++);
+        }
+
+        static Instruction *STOREI(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::STOREI, (*label)++);
+        }
+
+        static Instruction *ADD(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::ADD, (*label)++);
+        }
+
+        static Instruction *SUB(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::SUB, (*label)++);
+        }
+
+        static Instruction *SHIFT(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::SHIFT, (*label)++);
+        }
+
+        static Instruction *INC(int64_t *label) {
+            return new Instruction(ASM::INC, (*label)++);
+        }
+
+
+        static Instruction *DEC(int64_t *label) {
+            return new Instruction(ASM::DEC, (*label)++);
+        }
+
+
+        static Instruction *HALT(int64_t *label) {
+            return new Instruction(ASM::HALT, (*label)++);
+        }
+
+
+        static Instruction *JUMP(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::JUMP, (*label)++);
+        }
+
+        static Instruction *JPOS(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::JPOS, (*label)++);
+        }
+
+        static Instruction *JZERO(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::JZERO, (*label)++);
+        }
+
+        static Instruction *JNEG(int64_t arg,int64_t *label) {
+            return new Instruction(ASM::JNEG, (*label)++);
+        }
+
+
+
+
+        static void GET(std::vector<Instruction*>& out, int64_t* label) {
             out.push_back(new Instruction(ASM::GET, (*label)++));
     }
 
@@ -74,9 +144,25 @@ struct Instruction {
 
     static void HALT(std::vector<Instruction*>& out, int64_t* label) {
             out.push_back(new Instruction(ASM::HALT, (*label)++));   
-    }    
+    }
+
+    static void JUMP(std::vector<Instruction*>& out, int64_t arg, int64_t* label) {
+            out.push_back(new Instruction(ASM::JUMP, arg, (*label)++));  
+
+    }
+    static void JPOS(std::vector<Instruction*>& out, int64_t arg, int64_t* label) {
+            out.push_back(new Instruction(ASM::JPOS, arg, (*label)++));  
+    }
+    static void JZERO(std::vector<Instruction*>& out, int64_t arg, int64_t* label) {
+            out.push_back(new Instruction(ASM::JZERO, arg, (*label)++));  
+    }
+    static void JNEG(std::vector<Instruction*>& out, int64_t arg, int64_t* label) {
+            out.push_back(new Instruction(ASM::JNEG, arg, (*label)++));  
+    }
+
 
 };
 
 std::ostream & operator<<(std::ostream &stream, const Instruction &instruction);
+
 #endif

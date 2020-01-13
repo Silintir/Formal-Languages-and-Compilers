@@ -37,14 +37,14 @@
 
 %token <token> DECLARE COMMA K_BEGIN K_END
 %token <token> ASSIGN PLUS MINUS TIMES DIV MOD 
-%token <token> BRACKET_ON COLON BRACKET_OFF SEMICOLON
+%token <token> BRACKET_ON COLON BRACKET_OFF SEMICOLON NEG
 %token <token> WHILE DO ENDWHILE ENDDO
 %token <token> IF THEN ELSE ENDIF
 %token <token> FOR FROM TO DOWNTO ENDFOR
-%token <token> READ WRITE
+%token <token> READ WRITE 
 %token <token> EQ NEQ LE GE LEQ GEQ
 %token <text> PIDENTIFIER
-%token <val> NUM
+%token <val> NUM 
 %left PLUS MINUS
 %left TIMES DIV MOD
 
@@ -177,6 +177,9 @@ value:
         NUM { 
             $$ = new ast::Value($1, line); 
         }
+    |   NEG NUM {
+            $$ = new ast::Value(-$2, line);
+        }   
     |   identifier {
             $$ = new ast::Value($1, line);
         }

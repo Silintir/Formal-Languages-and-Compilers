@@ -88,11 +88,12 @@ namespace ast {
         public:
             int64_t value;
             Identifier *identifier;
-            
+            bool constI = true;
+            bool is_const() {return constI;}
             Value(int64_t val, int64_t line) : value(val), identifier(NULL), Node(line) {}
-            Value(Identifier *identifier, int64_t line) : value(-1), identifier(identifier), Node(line) {}
+            Value(Identifier *identifier, int64_t line) : value(-1), identifier(identifier), Node(line),  constI(false) {}
             
-            bool is_const() {return value != -1;}
+            
             std::vector<Instruction*> gen_ir(int64_t *cur_label);
     };
 
@@ -102,7 +103,7 @@ namespace ast {
         Value *right;
         
         Expression(Value *left, Value *right, int64_t line) : left(left), right(right) {} 
-        
+        virtual std::string op() = 0;
         virtual std::vector<Instruction*> gen_ir(int64_t *cur_label) = 0;
     };
 
@@ -192,36 +193,42 @@ namespace ast {
             : Expression(value, NULL, line) {}
 
             std::vector<Instruction*> gen_ir(int64_t *cur_label);
+             std::string op() { return "Const"; }
     };   
 
     class Plus : public Expression {
         public:
             Plus(Value *left, Value *right, int64_t line) : Expression(left, right, line) {}
             std::vector<Instruction*> gen_ir(int64_t *cur_label);
+             std::string op() { return "Plus"; }
     };
 
     class Minus : public Expression {
         public:
             Minus(Value *left, Value *right, int64_t line) : Expression(left, right, line) {}
             std::vector<Instruction*> gen_ir(int64_t *cur_label);
+             std::string op() { return "Minus"; }
     };
 
     class Times : public Expression {
         public:
             Times(Value *left, Value *right, int64_t line) : Expression(left, right, line) {}
             std::vector<Instruction*> gen_ir(int64_t *cur_label);
+             std::string op() { return "Times"; }
     };
 
     class Div : public Expression {
         public:
             Div(Value *left, Value *right, int64_t line) : Expression(left, right, line) {}
             std::vector<Instruction*> gen_ir(int64_t *cur_label);
+             std::string op() { return "Div"; }
     };
 
     class Mod : public Expression {
         public:
             Mod(Value *left, Value *right, int64_t line) : Expression(left, right, line) {}
             std::vector<Instruction*> gen_ir(int64_t *cur_label);
+             std::string op() { return "Mod"; }
     };
 
     class EQ : public Condition {
