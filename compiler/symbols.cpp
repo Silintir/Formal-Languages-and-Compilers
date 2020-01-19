@@ -26,7 +26,7 @@ bool Symbols::declare(ast::Identifier *identifier) {
         if (id_type == typeid(ast::Var)) {
             var = Symbol(identifier->name, identifier->line, offset);
         } else if (id_type == typeid(ast::ConstArray)){
-            var = Symbol(identifier->name, identifier->line, (((ast::ConstArray*)identifier)->index_e - ((ast::ConstArray*)identifier)->index_b)+2, offset,
+            var = Symbol(identifier->name, identifier->line, (((ast::ConstArray*)identifier)->index_e - ((ast::ConstArray*)identifier)->index_b)+3, offset,
             ((ast::ConstArray*)identifier)->index_e, ((ast::ConstArray*)identifier)->index_b);
             
         }
@@ -75,7 +75,7 @@ bool Symbols::undeclare_iter(std::string name) {
     if(table.find(name) == table.end()) {
         return true;
     }
-    table[name].not_in_scope = false;
+    table[name].not_in_scope = true;
     return true;
 }
 
