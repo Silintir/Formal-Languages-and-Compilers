@@ -15,7 +15,7 @@ class Symbol {
         bool is_array = false;
         bool is_initialized = false;
         bool iterator = false;
-        bool not_in_scope = true;
+        bool not_in_scope = false;
         std::string name;
         int64_t offset_id;
         int64_t size, idx_a, idx_b;

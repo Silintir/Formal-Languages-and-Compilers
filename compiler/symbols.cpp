@@ -91,6 +91,10 @@ bool Symbols::is_initialized(ast::Identifier *identifier) {
     if(table.find(identifier->name) == table.end()) {
         return false;
     }
+    if(table[identifier->name].not_in_scope == true){
+        return false;
+    } 
+
     return table[identifier->name].is_initialized;
 }
 

@@ -25,15 +25,17 @@ namespace ast {
 
     std::vector<Instruction*> load_value(Value *value, int64_t *label) {
         std::vector<Instruction*> out;
+        
          if (value->is_const()) {
              return value->gen_ir(label);
 
         } else if(symbols.get_symbol(value->identifier->name).is_array){
+            value->identifier->gen_ir(label);
             if (typeid(*value->identifier) == typeid(ast::ConstArray)) {
                 int64_t off = symbols.get_symbol(value->identifier->name).offset_id; 
                 auto idx = (((ast::ConstArray*)value->identifier)->idx+2 - symbols.get_symbol(value->identifier->name).idx_b);
                 Instruction::LOAD(out,off+idx, label); 
-            } else {
+            } else if (typeid(*value->identifier) == typeid(ast::VarArray)) {
                 Instruction::LOAD(out, symbols.get_symbol(value->identifier->name).offset_id, label);
                 Instruction::SUB(out,  symbols.get_symbol(value->identifier->name).offset_id+1, label);
                 Instruction::INC(out, label);
@@ -42,6 +44,7 @@ namespace ast {
                 Instruction::LOADI(out, 0, label);
             }
         } else {
+            value->identifier->gen_ir(label);
             out = value->gen_ir(label);
             Instruction::LOAD(out, symbols.get_symbol(value->identifier->name).offset_id, label);
         }
@@ -93,6 +96,11 @@ namespace ast {
         for (Identifier *identifier : arrays) {
             if (!symbols.declare(identifier)) {
                 err_redeclaration("DECL", identifier);
+            }
+            if (((ast::ConstArray*)identifier)->index_b > ((ast::ConstArray*)identifier)->index_e) {
+                std::ostringstream os;
+                os << "Wrong range of table: " << identifier->name << std::endl;
+                generator.report(os, identifier->line);
             }
             symbols.set_array(identifier);
             // W zerowym miejscu arraya znajduje sie jego offset
@@ -147,6 +155,8 @@ namespace ast {
             generator.report(os, line);
             return output;
         }
+        identifier->gen_ir(cur_label);
+
         if(symbols.get_symbol(identifier->name).is_array){
             if (typeid(*identifier) == typeid(ast::ConstArray)) {
                 output = identifier->gen_ir(cur_label);
@@ -154,7 +164,7 @@ namespace ast {
                 int64_t off = symbols.get_symbol(identifier->name).offset_id;
                 auto idx = (((ast::ConstArray*)identifier)->idx+2 - symbols.get_symbol(identifier->name).idx_b); 
                 Instruction::STORE(output,off+idx, cur_label);
-            } else {
+            } else if (typeid(*identifier) == typeid(ast::VarArray)) {
                 Instruction::LOAD(output, symbols.get_symbol(identifier->name).offset_id, cur_label);
                 Instruction::SUB(output,  symbols.get_symbol(identifier->name).offset_id+1, cur_label);
                 Instruction::INC(output, cur_label);
@@ -309,28 +319,32 @@ namespace ast {
         }
 
         symbols.undeclare_iter(_to->name);
-
+        //std::cerr << "undeclaring " << _to->name << std::endl; 
         symbols.undeclare_iter(iterator->name);
-
+        //std::cerr << "undeclaring " << iterator->name << std::endl;
         
         return out;
     }
 
     // DONE
     std::vector<Instruction*> Read::gen_ir(int64_t *cur_label) {
+    
         std::vector<Instruction*> output;
         if (!symbols.set_initialized(identifier)) {
-            error(identifier->name+" not defined in line: ", line);
+            error(identifier->name+" not defined in line: %d", line);
             return output;
         } 
+
+        identifier->gen_ir(cur_label);
         if(symbols.get_symbol(identifier->name).is_array){
+           
             if (typeid(*identifier) == typeid(ast::ConstArray)) {
                 insert_back(output, identifier->gen_ir(cur_label));
                 Instruction::GET(output,cur_label);
                 int64_t off = symbols.get_symbol(identifier->name).offset_id; 
                 auto idx = (((ast::ConstArray*)identifier)->idx+2 - symbols.get_symbol(identifier->name).idx_b);
                 Instruction::STORE(output,off+idx, cur_label);
-            } else {
+            } else if (typeid(*identifier) == typeid(ast::VarArray)) {
                 Instruction::LOAD(output, symbols.get_symbol(identifier->name).offset_id, cur_label);
                 Instruction::SUB(output,  symbols.get_symbol(identifier->name).offset_id+1, cur_label);
                 Instruction::INC(output, cur_label);
@@ -413,14 +427,14 @@ namespace ast {
             output = generate_number(num, cur_label);
         } else if (left->is_const()) {
             insert_back(output, load_value(right, cur_label));
-            Instruction::STORE(output, symbols.offset, cur_label);
             int64_t subtraction = symbols.offset; symbols.offset++;
-            output = left->gen_ir(cur_label);
+            Instruction::STORE(output, subtraction, cur_label);
+            insert_back(output, left->gen_ir(cur_label));
             Instruction::SUB(output, subtraction, cur_label);
         } else if (right->is_const()) {
-            output = right->gen_ir(cur_label);
-            Instruction::STORE(output, symbols.offset, cur_label);
+            insert_back(output, right->gen_ir(cur_label));
             int64_t subtraction = symbols.offset; symbols.offset++;
+            Instruction::STORE(output, subtraction, cur_label);
             insert_back(output, load_value(left, cur_label));
             Instruction::SUB(output, subtraction, cur_label);
         } else {
@@ -456,9 +470,11 @@ namespace ast {
                 int64_t one = symbols.offset; symbols.offset++;
                 int64_t single_value_offset = symbols.offset; symbols.offset++;
                 int64_t ref_offest = symbols.offset; symbols.offset++;
+                int64_t result = symbols.offset; symbols.offset++;
                 int64_t sign_offset = symbols.offset; symbols.offset++;
 
                 Instruction::SUB(output, 0, cur_label);
+                Instruction::STORE(output, result, cur_label);
                 Instruction::STORE(output, sign_offset, cur_label);
                 Instruction::INC(output, cur_label);
                 Instruction::STORE(output, one, cur_label);
@@ -481,42 +497,44 @@ namespace ast {
                 Instruction::LOAD(output, ref_offest, cur_label);
                 Instruction::STORE(output, single_value_offset, cur_label);
 
-                while (multiplier * 2 < target) {
-                    Instruction::SHIFT(output, one, cur_label);
-                    multiplier*=2;
+                
+                while (!(target == 1) && !(target == 0)) {
+
+                    multiplier = 1;
+
+                    while (multiplier * 2 < target) {
+                        Instruction::SHIFT(output, one, cur_label);
+                        multiplier*=2;
+                    }
+                    
+                    target -= multiplier;
+                    Instruction::ADD(output, result, cur_label);
+                    Instruction::STORE(output, result, cur_label);
+                    Instruction::LOAD(output, single_value_offset, cur_label);
+
                 }
 
-                // if multiplier+1 == target - then add, else multiplier = 1, target = target - multiplier, and all over again
-
-                // if (multiplier * 2 - target < target - multiplier) {
-                //     Instruction::SHIFT(output, one, cur_label);
-                //     multiplier*=2;
-                //     while (multiplier > target) {
-                //         Instruction::SUB(output, single_value_offset, cur_label);
-                //         multiplier--;
-                //     }
-                // } else {
-                //     while (multiplier < target) {
-                //         Instruction::ADD(output, single_value_offset, cur_label);
-                //         multiplier++;
-                //     }
-                // }
-                Instruction::STORE(output, single_value_offset, cur_label);
-
+                if (target == 1) {
+                    Instruction::LOAD(output, result, cur_label);
+                    Instruction::ADD(output, single_value_offset, cur_label);
+                    Instruction::STORE(output, result, cur_label);
+                }
+               
+                //std::cout << sign_const << std::endl;
                 if (sign_const) {
                     Instruction::LOAD(output, sign_offset, cur_label);
                     Instruction::JNEG(output, *cur_label+3, cur_label);
-                    Instruction::LOAD(output, single_value_offset, cur_label);
+                    Instruction::LOAD(output, result, cur_label);
                     Instruction::JUMP(output, *cur_label+3, cur_label);
                     Instruction::SUB(output, 0, cur_label);
-                    Instruction::SUB(output, single_value_offset, cur_label);
+                    Instruction::SUB(output, result, cur_label);
                 } else {
                     Instruction::LOAD(output, sign_offset, cur_label);
-                    Instruction::JPOS(output, *cur_label+3, cur_label);
-                    Instruction::LOAD(output, single_value_offset, cur_label);
+                    Instruction::JZERO(output, *cur_label+3, cur_label);
+                    Instruction::LOAD(output, result, cur_label);
                     Instruction::JUMP(output, *cur_label+3, cur_label);
                     Instruction::SUB(output, 0, cur_label);
-                    Instruction::SUB(output, single_value_offset, cur_label);
+                    Instruction::SUB(output, result, cur_label);
                 }
                 jump_to_end_if_zero->arg = *cur_label;
 
@@ -530,8 +548,11 @@ namespace ast {
             int64_t multiplier = symbols.offset; symbols.offset++;
             int64_t one = symbols.offset; symbols.offset++;
             int64_t neg_one = symbols.offset; symbols.offset++;
+            int64_t target = symbols.offset; symbols.offset++;
+            int64_t result = symbols.offset; symbols.offset++;
 
             Instruction::SUB(output, 0, cur_label);
+            Instruction::STORE(output, result, cur_label);
             Instruction::DEC(output, cur_label);
             Instruction::STORE(output, neg_one, cur_label);
             Instruction::INC(output, cur_label);
@@ -562,23 +583,39 @@ namespace ast {
             Instruction *jump_2_if_0 = Instruction::JZERO(Instruction::Undef, cur_label);
             output.push_back(jump_2_if_0);
 
-            Instruction::JPOS(output, *cur_label+12, cur_label);
+            Instruction::JPOS(output, *cur_label+13, cur_label);
             Instruction::STORE(output, right_temp, cur_label);
             Instruction::SUB(output ,0 ,cur_label);
             Instruction::SUB(output ,right_temp ,cur_label);
             Instruction::STORE(output, right_temp, cur_label);
+            Instruction::STORE(output, target, cur_label);
             Instruction::LOAD(output, sign, cur_label);
             Instruction::JNEG(output, *cur_label+3, cur_label);
             Instruction::DEC(output, cur_label);
             Instruction::JUMP(output, *cur_label+2, cur_label);
             Instruction::INC(output, cur_label);
             Instruction::STORE(output, sign, cur_label);
-            Instruction::JUMP(output, *cur_label+2, cur_label);
+            Instruction::JUMP(output, *cur_label+3, cur_label);
             Instruction::STORE(output, right_temp, cur_label);
+            Instruction::STORE(output, target, cur_label);
 
-            //until b - mult > 0
+            // while (!(target == 1) && !(target == 0)) // external loop
+            int64_t begin_loop = *cur_label;
+            Instruction::LOAD(output, target, cur_label);
+            Instruction *jump1 = Instruction::JZERO(Instruction::Undef, cur_label);
+            output.push_back(jump1);
+            Instruction::DEC(output, cur_label);
+            Instruction *jump2 = Instruction::JZERO(Instruction::Undef, cur_label);
+            output.push_back(jump2);
+
+            //  multiplier = 1;
+            Instruction::SUB(output, 0 ,cur_label);
+            Instruction::INC(output, cur_label);
+            Instruction::STORE(output, multiplier, cur_label);
+
+            //until b - mult > 0 // internal loop
             int64_t label_loop1_begin = *cur_label;
-            Instruction::LOAD(output, right_temp, cur_label);
+            Instruction::LOAD(output, target, cur_label);
             Instruction::SUB(output, multiplier, cur_label);
             Instruction::JNEG(output, *cur_label+9, cur_label);
             Instruction *jump_if_0 = Instruction::JZERO(Instruction::Undef, cur_label);
@@ -591,9 +628,10 @@ namespace ast {
             Instruction::LOAD(output, left_temp, cur_label);
             Instruction::SHIFT(output, one, cur_label);
             Instruction::STORE(output, left_temp, cur_label);
+            // end of internal loop
             Instruction::JUMP(output, label_loop1_begin, cur_label);
 
-            // when b - mult < 0 // mult = mult/2
+            // when b - mult < 0 // mult = mult/2 // left = left/2
             Instruction::LOAD(output, multiplier, cur_label);
             Instruction::SHIFT(output, neg_one, cur_label);
             Instruction::STORE(output, multiplier, cur_label);
@@ -601,33 +639,41 @@ namespace ast {
             Instruction::SHIFT(output, neg_one, cur_label);
             Instruction::STORE(output, left_temp, cur_label);
 
-            // until b-mult == 0
-            int64_t label_loop2_begin = *cur_label;
-            Instruction::LOAD(output, right_temp, cur_label);
-            Instruction::SUB(output, multiplier, cur_label);
-            Instruction::JZERO(output,*cur_label+8, cur_label);
-
-            // mult++ // left += right
-            Instruction::LOAD(output, multiplier, cur_label);
-            Instruction::INC(output, cur_label);
-            Instruction::STORE(output, multiplier, cur_label);
-            Instruction::LOAD(output, left_temp, cur_label);
-            Instruction::ADD(output, left_temp2, cur_label);
-            Instruction::STORE(output, left_temp, cur_label);
-            Instruction::JUMP(output, label_loop2_begin, cur_label);
-
+            // target -= multiplier;
             jump_if_0->arg = *cur_label;
+            Instruction::LOAD(output, target, cur_label);
+            Instruction::SUB(output, multiplier, cur_label);
+            Instruction::STORE(output, target, cur_label);
+
+            Instruction::LOAD(output, left_temp, cur_label);
+            Instruction::ADD(output, result, cur_label);
+            Instruction::STORE(output, result, cur_label);
+            Instruction::LOAD(output, left_temp2, cur_label);
+            Instruction::STORE(output, left_temp, cur_label);
+            // end of external loop
+            Instruction::JUMP(output, begin_loop, cur_label);
+
+
+            jump2->arg = *cur_label;
+            // if target == 1
+            Instruction::LOAD(output, result, cur_label);
+            Instruction::ADD(output, left_temp2, cur_label);
+            Instruction::STORE(output, result, cur_label);
+
+
+            jump1->arg = *cur_label;
+            
 
             Instruction::LOAD(output, sign, cur_label);
             Instruction::JNEG(output, *cur_label+2, cur_label);
             Instruction::JUMP(output, *cur_label+6, cur_label);
 
-            Instruction::LOAD(output, left_temp, cur_label);
+            Instruction::LOAD(output, result, cur_label);
             Instruction::SUB(output, 0, cur_label);
-            Instruction::SUB(output, left_temp, cur_label);
-            Instruction::STORE(output, left_temp, cur_label);
+            Instruction::SUB(output, result, cur_label);
+            Instruction::STORE(output, result, cur_label);
             Instruction::JUMP(output, *cur_label+2, cur_label);
-            Instruction::LOAD(output, left_temp, cur_label);
+            Instruction::LOAD(output, result, cur_label);
            
             jump_1_if_0->arg = *cur_label;
             jump_2_if_0->arg = *cur_label;
@@ -1105,7 +1151,7 @@ namespace ast {
         }
         if (var.is_array) {
             std::ostringstream os;
-            os << "Attept to use array: " << name << std::endl;
+            os << "Attempt to use array as a variable: " << name << std::endl;
             generator.report(os, line);
             return std::vector<Instruction*>();
         }
@@ -1140,6 +1186,8 @@ namespace ast {
     }
 
     std::vector<Instruction*> VarArray::gen_ir(int64_t *cur_label) {
+    
+
         Symbol arr = symbols.get_symbol(name);
         if (arr.line == Symbol::undef) {
             std::ostringstream os;
@@ -1169,9 +1217,19 @@ namespace ast {
     }
 
     bool check_init(Identifier *identifier) {
+
+        if (typeid(*identifier) == typeid(ast::VarArray)){
+            if (!symbols.is_initialized(((ast::VarArray*)identifier)->index)) {
+                std::ostringstream os;
+                os << "Attempt to write unintialized variable: " << ((ast::VarArray*)identifier)->index->name << std::endl;
+                generator.report(os, identifier->line);
+                return false;
+            }
+        }
+
         if (!symbols.is_initialized(identifier)) {
             std::ostringstream os;
-            os << "Attempt to write unintialized variable" << std::endl;
+            os << "Attempt to write unintialized variable: " << identifier->name << std::endl;
             generator.report(os, identifier->line);
             return false;
         }
